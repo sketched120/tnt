@@ -17,22 +17,50 @@
 #include "include/version.h"
 
 char *minecraft_path = NULL;
+char *offline_username = NULL;
+bool offline = false;
 
-static void print_help(const char *prog) {
-  printlog("INFO", "launcher", "usage: %s [options]\n"
-         "options:\n"
-         "  -l -v <version>          launch a version\n"
-         "  -D <version>             dry run (print java cmdline)\n"
-         "  -L                       list available versions\n"
-         "  -d -v <version> -t <type>  download a version\n"
-         "  -t <type>                release, snapshot, fabric\n"
-         "  -f <version>             fabric loader version (default: latest)\n"
-         "  -p <path>                minecraft path (default: ~/.minecraft)\n"
-         "  -n <instance>            use an instance directory\n"
-         "  -i                       list installed versions\n"
-         "  -h                       print this help and exit", prog);
+bool wayland = false;
+
+static void print_help_main(const char *prog) {
+  lprintf(INFO,
+      "usage: %s [options]\n"
+      "options:\n"
+      "  --launch \t\tlaunch a version\n"
+      "  --download \t\tdownload a version\n"
+      "  --dry-run \t\t dry run (print java cmdline)\n"
+      "  --list-available <type>\t\tlist available versions\n"
+      "  --type <type>\t\trelease, snapshot, fabric\n"
+      "  --path <path>\t\tminecraft path (default: ~/.minecraft)\n"
+      "  --instance <instance>\t\tuse an instance directory\n"
+      "  --list-installed\t\t\tlist installed versions\n"
+      "  --help\t\t\tprint this help and exit",
+      prog);
 }
 
+static void print_help_download(void) {
+	lprintf(INFO,
+	"\n--download : downloads a version\n"
+	"options:\n"
+	"\t--version\tspecifies a version to download\n"
+	"\t--type\tspecifies the type to install (release, vanilla, fabric)\n"
+	"\t--fabric-version\tspecifies the fabric loader version to install (used with '--type fabric' only)"
+	);
+}
+
+static void print_help_launch(void) {
+	lprintf(INFO,
+	"\n--launch : launches a minecraft installation\n"
+	"options: \n"
+	"\t--version\tspecifies a version to launch\n"
+	"\t--mem\tspecifies the amount of memory (in GB) to allocate for the jvm (default: 2)\n"
+	"\t--offline\tlaunches the game in offline mode (without authentication)"
+	);
+}
+#define NOARG 0
+#define REQARG 1
+#define OPARG 2
+  
 int main(int argc, char *argv[]) {
   curl_global_init(CURL_GLOBAL_ALL);
 
@@ -47,14 +75,35 @@ int main(int argc, char *argv[]) {
   int fast = 0;
   int opt;
   int exit_code = 0;
-
+  int refresh = 0;
+  int help = 0;
   opterr = 0;
 
-  while ((opt = getopt(argc, argv, "lD:Ldv:t:Ff:p:in:m:zh")) != -1) {
+
+  struct option longopts[] = {
+  	{"launch", NOARG, NULL, 'l'},
+  	{"dry-run",	REQARG,	NULL,	'D'},
+  	{"list-available",	REQARG,	NULL,	'L'},
+  	{"version", REQARG,	NULL,	'v'},
+  	{"download", NOARG,	NULL,	'd'},
+  	{"minecraft-path", REQARG, NULL, 'p'},
+  	{"type",	REQARG, 	NULL, 	't'},
+  	{"fast",	NOARG,		NULL,	'F'},
+  	{"fabric-version",	REQARG, NULL,	'f'},
+  	{"list-installed",	NOARG,	NULL, 'i'},
+  	{"instance",	REQARG,	NULL, 'n'},
+  	{"offline", 	REQARG,	NULL,	'o'},
+  	{"mem",	REQARG,	NULL,	'm'},
+  	{"refresh", NOARG,	NULL, 'r'},
+  	{"help", 	NOARG,	NULL,	'h'},
+  	{NULL,	0,	NULL, 0}
+  	
+  };
+  while ((opt = getopt_long(argc, argv, "lD:L:dv:t:Ff:p:in:m:zho:wr", longopts, NULL)) != -1) {
     switch (opt) {
     case 'l': launch = 1; break;
     case 'D': dry_arg = optarg; break;
-    case 'L': list = 1; break;
+    case 'L': list = 1; type = optarg; break;
     case 'v': version = optarg; break;
     case 'd': download = 1; break;
     case 'p': minecraft_path = strdup(optarg); break;
@@ -63,21 +112,25 @@ int main(int argc, char *argv[]) {
     case 'f': fabric_version = optarg; break;
     case 'i': listi = 1; break;
     case 'n': instance = optarg; break;
-    case 'z': zmm = 1; break;
+    // case 'z': zmm = 1; break;
+    case 'o': offline = true; offline_username = optarg; break; // global change
     case 'm': mem = strtof(optarg, NULL); break;
+    case 'r': refresh = 1; break;
     case 'h':
-      print_help(argv[0]);
-      goto cleanup;
+      help = 1;
+	  break;
     case '?':
       if (optopt)
-        printlog("ERROR", "launcher", "Unknown option '%-c'", optopt);
+        lprintf(ERROR, "Unknown option '%-c'", optopt);
       else
-        printlog("ERROR", "launcher","Unknown option '%s'", argv[optind - 1]);
+       lprintf(ERROR,"Unknown option '%s'", argv[optind - 1]);
       exit_code = 1;
       goto cleanup;
     }
   }
 
+	
+	
   if (!minecraft_path) {
     asprintf(&minecraft_path, "%s/.minecraft", getenv("HOME"));
   }
@@ -90,8 +143,16 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  printlog("INFO", "launcher", "zap 0.0.1" );
+  lprintf(INFO, "zap 0.0.2" );
 
+  if (getenv("WAYLAND_DISPLAY") != NULL) wayland = true;
+  if (refresh) {
+    	unlink("version_manifest.json");
+    	download_version_manifest();
+    	lprintf(INFO, "refreshed version manifest. you may now see the latest available versions.");
+  	return 0;
+  }
+  
   if (instance) {
     char *inst_path = NULL;
     asprintf(&inst_path, "%s/instances/%s", minecraft_path, instance);
@@ -116,18 +177,22 @@ int main(int argc, char *argv[]) {
   }
 
   if (optind < argc) {
-    printlog("ERROR","launcher","Unexpected argument '%s'", argv[optind]);
+    lprintf(ERROR,"Unexpected argument '%s'", argv[optind]);
     exit_code = 1;
     goto cleanup;
   }
 
   if (launch == 1) {
+  	if (help) {
+  		print_help_launch();
+  		goto cleanup;
+  	}
     if (version) {
       fastcreate(argc, argv);
       launchmc(0, mem, version);
       goto cleanup;
     } else {
-      printlog("ERROR", "launcher", "Specify a version to launch.");
+      lprintf(ERROR, "Specify a version to launch.");
       exit_code = 1;
       goto cleanup;
     }
@@ -144,9 +209,13 @@ int main(int argc, char *argv[]) {
   }
 
   if (download == 1) {
+  	if (help) {
+    		print_help_download();
+    		goto cleanup;
+    	}
     if (version) {
       if (!type) {
-        printlog("ERROR", "launcher","Specify a type!");
+        lprintf(ERROR,"Specify a type!");
         exit_code = 1;
         goto cleanup;
       }
@@ -163,11 +232,11 @@ int main(int argc, char *argv[]) {
         }
         download_fabric_manifest(version, fabric_version);
         if (download_version(version) != 0) {
-          printlog("ERROR", __func__, "Download failed!");
+          lprintf(ERROR, "Download failed!");
           exit_code = 1;
         }
       } else {
-        printlog("ERROR", "launcher", "Invalid type!");
+        lprintf(ERROR, "Invalid type!");
         exit_code = 1;
       }
       goto cleanup;
@@ -179,7 +248,11 @@ int main(int argc, char *argv[]) {
     goto cleanup;
   }
 
-  printlog("ERROR", "launcher", "No mode specified, try -h");
+  if (help) {
+  		print_help_main(argv[0]);
+  		goto cleanup;
+  	}
+  lprintf(ERROR, "No mode specified, try -h");
   exit_code = 1;
 
 cleanup:

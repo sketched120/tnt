@@ -9,6 +9,10 @@
 static char *resolve_var(const char *arg, LaunchContext *ctx) {
     size_t buf_size = strlen(ctx->classpath) + 8192;
     char *out = malloc(buf_size);
+    if (!out) {
+    	lprintf(ERROR, "out of memory when allocating output buffer!");
+    	exit(1);
+    }
     int i = 0, j = 0;
 
     while (arg[i] != '\0') {
@@ -40,7 +44,13 @@ static char *resolve_var(const char *arg, LaunchContext *ctx) {
                 size_t vlen = strlen(val);
                 if ((size_t)j + vlen + 1 >= buf_size) {
                     buf_size = (size_t)j + vlen + 8192;
-                    out = realloc(out, buf_size);
+                    char *tmp = realloc(out, buf_size);
+                    if (!tmp) {
+                    	lprintf(ERROR, "out of memory when reallocing tmp!");
+                    	free(out);
+                    	exit(1);
+                    }
+                    out = tmp;
                 }
                 while (*val)
                     out[j++] = *val++;
@@ -90,6 +100,10 @@ char **build_jvm_args(cJSON *version_json, LaunchContext *ctx) {
 
 char **build_game_args(cJSON *version_json, LaunchContext *ctx) {
     char **args = malloc(sizeof(char *) * 256);
+    if (!args) {
+    	lprintf(ERROR, "out of memory while allocating argument array!");
+    	return NULL;
+    }
     int idx = 0;
 
     cJSON *arguments = cJSON_GetObjectItem(version_json, "arguments");

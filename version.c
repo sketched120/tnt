@@ -12,23 +12,26 @@
 #include "include/download.h"
 #include "include/utils.h"
 
-static void download_version_manifest(void) {
+void download_version_manifest(void) {
+  char path[512];
+  snprintf(path, sizeof(path), "%s/version_manifest.json", minecraft_path);
   download_file("https://piston-meta.mojang.com/mc/game/version_manifest.json",
-                "version_manifest.json");
+                path);
 }
 int list_available_versions(char *vertype) {
 
   download_version_manifest();
-
-  char *vm_buf = read_file("version_manifest.json");
+  char path[512];
+  snprintf(path, sizeof(path), "%s/version_manifest.json", minecraft_path);
+  char *vm_buf = read_file(path);
   if (!vm_buf) {
-      printlog("ERROR", __func__, "Failed to READ version_manifest.json!");
+      lprintf(ERROR, "Failed to READ version_manifest.json!");
       return 1;
   }
 
   cJSON *manifest_json = cJSON_Parse(vm_buf);
   if (!manifest_json) {
-      printlog("ERROR", __func__, "Failed to PARSE version_manifest.json, is it corrupted?");
+      lprintf(ERROR, "Failed to PARSE version_manifest.json, is it corrupted?");
       free(vm_buf);
       return 1;
   }
@@ -90,7 +93,9 @@ int download_libraries(cJSON *libraries) {
   char **urls = malloc(libcount * sizeof(char *));
   char **dests = malloc(libcount * sizeof(char *));
   if (!urls || !dests) {
-      printlog("ERROR", __func__, "malloc failed: %s", strerror(errno));
+  	  lprintf(ERROR, "out of memory when allocating url/dest array!");
+  	  free(urls);
+  	  free(dests);
       return 1;
   }
 
@@ -237,7 +242,9 @@ static int download_assets(cJSON *version_json) {
   char **urls = malloc(a_count * (sizeof(char *)));
   char **dests = malloc(a_count * (sizeof(char *)));
   if (!urls || !dests) {
-      printlog("ERROR", __func__, "malloc failed: %s", strerror(errno));
+  	  lprintf(ERROR, "out of memory when allocating url/dest array!");
+  	  free(urls);
+  	  free(dests);
       return 1;
   }
 
@@ -248,8 +255,14 @@ static int download_assets(cJSON *version_json) {
   while (object) {
     cJSON *hash = cJSON_GetObjectItem(object, "hash");
     if (!object) {
-      printlog("ERROR", __func__, "Asset object doesn't have a valid hash,"
-      " is the index corrupted?");
+      lprintf(ERROR, "Asset object doesn't have a valid hash, "
+      	"is the index corrupted?");
+      for (int i = 0; i < start; i++) {
+      	free(urls[i]);
+      	free(dests[i]);
+      }
+      free(urls);
+      free(dests);
       return 1;
     }
 
@@ -288,7 +301,9 @@ int download_version(char *req_v) {
   printlog("INFO", __func__, "Downloading version manifest...");
   download_version_manifest();
 
-  char *vm_buf = read_file("version_manifest.json");
+  char path[512];
+  snprintf(path, sizeof(path), "%s/version_manifest.json", minecraft_path);
+  char *vm_buf = read_file(path);
   if (!vm_buf) {
       printlog("ERROR", __func__, "Failed to READ version_manifest.json!");
       goto abort;

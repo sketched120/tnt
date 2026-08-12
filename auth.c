@@ -1,5 +1,7 @@
 // auth.c
 
+#define _DEFAULT_SOURCE
+
 #include <cjson/cJSON.h>
 #include <curl/curl.h>
 #include <errno.h>
@@ -62,10 +64,10 @@ static void free_shit(Account *account) {
   memset(account, 0, sizeof(Account));
 }
 
-static int auth_post(PostType type, char *url, char *field, Buffer *resp,
+static int auth_post(PostType type, const char *url, const char *field, Buffer *resp,
                      long *http_code) {
   CURL *curl;
-  CURLcode result;
+  CURLcode result = 0;
 
   struct curl_slist *headers = NULL;
   switch (type) {
@@ -108,7 +110,7 @@ static int auth_post(PostType type, char *url, char *field, Buffer *resp,
   return (int)result;
 }
 
-static int auth_get(char *url, char *token, Buffer *resp, long *http_code) {
+static int auth_get(const char *url, const char *token, Buffer *resp, long *http_code) {
   CURL *curl;
 
   struct curl_slist *headers = NULL;
@@ -173,6 +175,11 @@ static int msa_auth(Account *account) {
            "Please enter the access code from"
            " your redirect URL: ");
   fgets(msa_code, sizeof(msa_code), stdin);
+  size_t len = strcspn(msa_code, "\n");
+  if (len > sizeof(msa_code)) {
+  	lprintf(ERROR, "buffer overflow when receiving msa code, token considered bad.");
+  	exit(1);
+  }
   msa_code[strcspn(msa_code, "\n")] = '\0';
 
   char *mstoken_url = "https://login.live.com/oauth20_token.srf";
@@ -540,7 +547,7 @@ static int profile_flow(Account *account) {
   return 0;
 }
 
-static int save_creds(const Account *account, char *path) {
+static int save_creds(const Account *account, const char *path) {
   cJSON *creds = cJSON_CreateObject();
 
   if (!cJSON_AddStringToObject(creds, "refresh_token",
@@ -603,7 +610,7 @@ fail:
   return 1;
 }
 
-void auth_flow() {
+void auth_flow(void) {
 
   char path[512];
   snprintf(path, sizeof(path), "%s/zap/creds.json", minecraft_path);
@@ -670,11 +677,16 @@ fail:
 Account *get_account_details(cJSON *creds) {
 
   Account *acc = malloc(sizeof(Account));
-
-  acc->name = cJSON_GetObjectItem(creds, "name")->valuestring;
-  acc->uuid = cJSON_GetObjectItem(creds, "uuid")->valuestring;
-
-  acc->mc_token = cJSON_GetObjectItem(creds, "ygg_token")->valuestring;
+	if (!acc) {
+		printlog("ERROR", __func__, "out of memory!");
+		return NULL;
+	}
+  cJSON *name = cJSON_GetObjectItem(creds, "name");
+  cJSON *uuid = cJSON_GetObjectItem(creds, "uuid");
+  cJSON *ygg_token = cJSON_GetObjectItem(creds, "ygg_token");
+  acc->name = name != NULL ? name->valuestring : "emptyname";
+  acc->uuid = uuid != NULL ? uuid->valuestring : "0000-000000-0000000000000000000";
+  acc->mc_token = ygg_token != NULL ? ygg_token->valuestring : NULL;
 
   return acc;
 }

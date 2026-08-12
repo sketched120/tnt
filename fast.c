@@ -14,9 +14,7 @@ int fastcreate(int argc, char *argv[]) {
   size_t offset = 0;
 
   for (int i = 0; i < argc; i++) {
-    int written = snprintf(command + offset, sizeof(command), "%s %s",
-                           command + offset, argv[i]);
-
+    int written = snprintf(command + offset, sizeof(command), "%s %s", command + offset, argv[i]);
     if (written > 0 && (size_t)written < sizeof(command) - offset) {
       offset += written;
     } else
@@ -59,7 +57,7 @@ char path[512];
 
   char *arg[128];
 
-  int i = 0;
+  unsigned int i = 0;
   char *context = NULL;
 
   size_t argsize = sizeof(arg)/sizeof(char *);

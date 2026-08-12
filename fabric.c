@@ -84,24 +84,42 @@ void download_fabric_libraries(cJSON *json) {
   char **urls = malloc(libcount * sizeof(char *));
   char **dests = malloc(libcount * sizeof(char *));
 
+  if (!urls || !dests ) {
+  	lprintf(ERROR, "out of memory when allocating url / dest array!");
+  	free(urls);
+  	free(dests);
+  	return;
+  }
+  
   cJSON *library;
+  char *path = NULL;
   cJSON_ArrayForEach(library, libraries) {
 
     cJSON *mvn_name = cJSON_GetObjectItem(library, "name");
     cJSON *mvn_url = cJSON_GetObjectItem(library, "url");
 
+	
     if (!mvn_name || !mvn_url) {
-      printlog("ERROR", __func__, "Maven name/URL is NULL!");
+      lprintf(ERROR, "Maven name/URL is NULL!");
+      for (int i = 0; i < start; i++) {
+        free(urls[i]);
+      	free(dests[i]);
+      }
+      free(path);
+      free(urls);
+      free(dests);
       return;
     }
 
-    char *path = get_jar_path(mvn_name->valuestring);
+    path = get_jar_path(mvn_name->valuestring); //allocation
     char url[BUF_LARGE];
     snprintf(url, sizeof(url), "%s%s", mvn_url->valuestring, path);
 
     size_t len = strlen(minecraft_path) + strlen(path) + 50;
     dests[start] = malloc(len);
     snprintf(dests[start], len, "libraries/%s", path);
+    free(path);
+    path = NULL;
     urls[start] = strdup(url);
     start++;
   }

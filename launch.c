@@ -78,16 +78,18 @@ void launchmc(int dry, float mem, char *version) {
   char *classpath = build_classpath(json);
 
   /* do the auth flow BEFORE parsing the json why the fuck did i not think about this */
-  auth_flow();
+  Account *acc;
+  cJSON *accounts_json;
+  if (!offline) { auth_flow();
   size_t acc_path_size = strlen(minecraft_path) + 16;
   char accounts_path[acc_path_size];
 
   snprintf(accounts_path, acc_path_size, "%s/zap/creds.json", minecraft_path);
 
   char *accounts_buf = read_file(accounts_path);
-  cJSON *accounts_json = cJSON_Parse(accounts_buf);
+  accounts_json  = cJSON_Parse(accounts_buf);
   if (!accounts_buf) {
-    printlog("ERROR", __func__, "Failed to READ accounts.json, create one from PrismLauncher");
+    printlog("ERROR", __func__, "Failed to READ creds.json.");
     free(classpath);
     free(asset_index);
     cJSON_Delete(json);
@@ -96,10 +98,11 @@ void launchmc(int dry, float mem, char *version) {
   }
   free(accounts_buf);
 
-  Account *acc = get_account_details(accounts_json);
+  acc = get_account_details(accounts_json);
+  }
   char natives_dir[BUF_LARGE];
   snprintf(natives_dir, sizeof(natives_dir), "natives/%s", version);
-
+	
   char game_dir[BUF_LARGE];
   getcwd(game_dir, sizeof(game_dir));
 
@@ -110,9 +113,9 @@ void launchmc(int dry, float mem, char *version) {
       .assets_dir = "assets/",
       .asset_index = asset_index,
       .game_dir = game_dir,
-      .username = acc->name,
-      .uuid = acc->uuid,
-      .access_token = acc->mc_token,
+      .username = acc != NULL ? acc->name : offline_username ,
+      .uuid = acc != NULL ? acc->uuid : "00000000-0000-0000-0000-000000000000",
+      .access_token = acc != NULL ? acc->mc_token : "0",
   };
 
   char **jvm_args = build_jvm_args(json, &ctx);
@@ -153,9 +156,35 @@ void launchmc(int dry, float mem, char *version) {
 
   char memarg[10];
   snprintf(memarg, sizeof(memarg), "-Xmx%dM", (int)(mem * 1024));
-
+  
+  // char wltoggle[128];
+  // const char *base_arg = "-Dorg.lwjgl.glfw.libname=";
+  // char *skip_check = "-Dorg.lwjgl.system.checkLinkage=false";
+  // const char *lib_path = NULL;
+  // 
+  // if (file_exists("/usr/lib/libglfw.so")) {
+  //     lib_path = "/usr/lib/libglfw.so";
+  // } else if (file_exists("/usr/lib64/libglfw.so")) {
+  //     lib_path = "/usr/lib64/libglfw.so";
+  // } else if (file_exists("/usr/lib/x86_64-linux-gnu/libglfw.so")) {
+  //     lib_path = "/usr/lib/x86_64-linux-gnu/libglfw.so";
+  // }
+  // 
+  // if (lib_path != NULL) {
+  //     snprintf(wltoggle, sizeof(wltoggle), "%s%s", base_arg, lib_path);
+  // } else {
+  //     snprintf(wltoggle, sizeof(wltoggle), "%sglfw", base_arg);
+  // }
   java_args[idx++] = javacmd;
   java_args[idx++] = memarg;
+  
+  if (wayland) {
+  setenv("SDL_VIDEO_DRIVER", "wayland", 1);
+	    
+	    // 2. Prevent common audio-thread blocking on Wayland compositors
+	setenv("SDL_AUDIO_DRIVER", "pipewire", 1);
+	lprintf(INFO, "wayland is enabled. this requires the system glfw library compiled for wayland installed in /usr/lib.");
+  }
   for (int i = 0; i < jvm_count; i++)
     java_args[idx++] = jvm_args[i];
   java_args[idx++] = main_class->valuestring;

@@ -12,16 +12,16 @@
 
 int streq(const char *a, const char *b) { return strcmp(a, b) == 0; }
 
-void printlog(const char *lvl, const char *affected, const char *msg, ...) {
+void printlog(WarnLevel level, const char *affected, const char *msg, ...) {
   time_t time_cur = time(NULL);
   struct tm *tm = localtime(&time_cur);
 
-  switch (lvl[0]) {
-  case 'E':
+  switch (level) {
+  case ERROR:
     fprintf(stderr, "[%02d:%02d:%02d] [%s/ERROR] ", tm->tm_hour, tm->tm_min,
             tm->tm_sec, affected);
     break;
-  case 'W':
+  case WARN:
     fprintf(stderr, "[%02d:%02d:%02d] [%s/WARN] ", tm->tm_hour, tm->tm_min,
             tm->tm_sec, affected);
     break;
@@ -71,7 +71,7 @@ bool is_allowed_on_linux(cJSON *library) {
 char *read_file(char *path) {
   FILE *file = fopen(path, "rb");
   if (!file) {
-    printlog("ERROR", __func__, "Failed to read file: %s\n",
+    lprintf(ERROR, "Failed to read file: %s\n",
              strerror(errno));
     return NULL;
   }
@@ -114,7 +114,7 @@ char *get_jar_path(char *libname) {
 
   char *out = malloc(1024);
   if (!out) {
-    printlog("ERROR", __func__, "malloc failed: %s", strerror(errno));
+    lprintf(ERROR, "malloc failed: %s", strerror(errno));
     return NULL;
   }
 
@@ -133,7 +133,7 @@ char *get_asset_index(cJSON *json) {
   cJSON *id = cJSON_GetObjectItem(assetIndex, "id");
   char *out = malloc(128);
   if (!out) {
-    printlog("ERROR", __func__, "malloc failed: %s", strerror(errno));
+    lprintf(ERROR,"malloc failed: %s", strerror(errno));
     return NULL;
   }
   snprintf(out, 128, "%s", id->valuestring);
@@ -144,7 +144,7 @@ void list_installed(void) {
   DIR *d = opendir("versions");
 
   if (!d) {
-    printlog("ERROR", __func__, "Failed to open directory: %s ",
+    lprintf(ERROR,"Failed to open directory: %s ",
              strerror(errno));
     return;
   }
@@ -153,7 +153,7 @@ void list_installed(void) {
   while ((entry = readdir(d)) != NULL) {
     if (entry->d_name[0] == '.')
       continue;
-    printf("%s\n", entry->d_name);
+    lprintf(INFO, "%s\n", entry->d_name);
   }
   closedir(d);
 }
@@ -162,7 +162,7 @@ char *build_classpath(cJSON *version_json) {
   size_t buf_size = 131072;
   char *classpath = malloc(buf_size);
   if (!classpath) {
-    printlog("ERROR", __func__, "malloc failed: %s", strerror(errno));
+    lprintf(ERROR,"malloc failed: %s", strerror(errno));
     return NULL;
   }
   classpath[0] = '\0';
@@ -182,7 +182,7 @@ char *build_classpath(cJSON *version_json) {
       buf_size *= 2;
       char *tmp = realloc(classpath, buf_size);
       if (!tmp) {
-        printlog("ERROR", __func__, "realloc failed: %s", strerror(errno));
+        lprintf(ERROR, "realloc failed: %s", strerror(errno));
 
         free(classpath);
         return NULL;
@@ -229,7 +229,7 @@ char *build_classpath(cJSON *version_json) {
     buf_size += 512;
     char *tmp = realloc(classpath, buf_size);
     if (!tmp) {
-      printlog("ERROR", __func__, "realloc failed: %s", strerror(errno));
+      lprintf(ERROR, "realloc failed: %s", strerror(errno));
       free(classpath);
       return NULL;
     }
